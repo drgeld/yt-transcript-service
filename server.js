@@ -172,6 +172,52 @@ app.get("/transcript", async (req, res) => {
       if (vttPath) break;
     }
 
+    // ---- Whisper fallback (OpenAI) ----
+// Try transcribing audio if captions aren't exposed
+try {
+  const key = process.env.OPENAI_API_KEY || "";
+  if (!key) throw new Error("OPENAI_API_KEY missing");
+
+  const audioBase = join(tmpdir(), `yt-${crypto.randomBytes(6).toString("hex")}`);
+  const audioPath = `${audioBase}.mp3`;
+
+  // Download audio only (requires ffmpeg installed)
+  let dlErr = null;
+  await sh("yt-dlp", [
+    String(url),
+    "-x", "--audio-format", "mp3",
+    "--no-warnings",
+    "-o", audioPath
+  ]).catch(e => { dlErr = e?.stderr || String(e); });
+
+  if (!dlErr && await exists(audioPath)) {
+    const file = await readFile(audioPath);
+    await rm(audioPath, { force: true }).catch(() => {});
+
+    // Node 18+ has FormData/Blob globally
+    const data = new FormData();
+    data.append("file", new Blob([file], { type: "audio/mpeg" }), "audio.mp3");
+    data.append("model", "whisper-1");            // OpenAI STT model
+    data.append("response_format", "text");       // plain text back
+
+    const resp = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${key}` },
+      body: data
+    });
+
+    const stt = await resp.text();
+    if (resp.ok && stt && stt.trim().length > 30) {
+      return res.json({ text: stt.trim(), source: "whisper" });
+    }
+    // else fall through to 422
+  }
+} catch (_) {
+  // Fall through to 422 below if anything fails
+}
+// ---- end Whisper fallback ----
+
+
     if (!vttPath) {
       const resp = { error: "No captions available for this video." };
       if (debug) resp["debug"] = diag;
@@ -203,3 +249,4 @@ app.get("/transcript", async (req, res) => {
 
 const port = process.env.PORT || 8080;
 app.listen(port, () => console.log("yt-dlp transcript service on :" + port));
+
