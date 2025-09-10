@@ -6,6 +6,7 @@ import { join } from "node:path";
 import crypto from "node:crypto";
 
 const app = express();
+const TOKEN = process.env.INTERNAL_TOKEN || "";
 
 function sh(file, args) {
   return new Promise((resolve, reject) => {
@@ -40,6 +41,12 @@ async function safeCleanup(paths) {
 }
 
 app.get("/transcript", async (req, res) => {
+    if (TOKEN) {
+    const header = req.get("Authorization") || "";
+    if (header !== `Bearer ${TOKEN}`) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+  }
   const url = req.query.url;
   if (!url) return res.status(400).json({ error: "Missing ?url=YOUTUBE_URL" });
 
@@ -97,3 +104,4 @@ app.get("/transcript", async (req, res) => {
 
 const port = process.env.PORT || 8080;
 app.listen(port, () => console.log("yt-dlp transcript service on :" + port));
+
