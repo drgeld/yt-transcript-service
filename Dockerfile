@@ -1,8 +1,7 @@
 FROM python:3.12-slim
-
-# Install yt-dlp (Python) and Node.js + npm
+# Install yt-dlp and Node + ffmpeg
 RUN pip install --no-cache-dir yt-dlp && \
-    apt-get update && apt-get install -y --no-install-recommends nodejs npm ca-certificates && \
+    apt-get update && apt-get install -y --no-install-recommends nodejs npm ca-certificates ffmpeg && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
